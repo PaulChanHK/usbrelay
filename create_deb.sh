@@ -14,7 +14,7 @@ sed -ri "s/(USBLIBVER =).*/\1 $version/" LIBVER.in
 
 if [[ ! "$@" =~ clean ]]; then
 
-  mkdir -p deb/usr/{bin,lib} deb/DEBIAN
+  mkdir -p deb/usr/{bin,lib} deb/DEBIAN deb/lib/udev/rules.d
 
   cat >deb/DEBIAN/control<<EOM
 Package: usbrelay
@@ -32,6 +32,7 @@ EOM
 
   cp usbrelay deb/usr/bin/
   cp libusbrelay.so* deb/usr/lib/
+  cp 50-usbrelay.rules deb/lib/udev/rules.d/92-usbrelay.rules
 
   dpkg-deb --build deb
   dpkg-name -o deb.deb
@@ -39,7 +40,7 @@ EOM
 else
 
   make $@
-  rm -fr deb *.deb
+  rm -fr deb
 
 fi
 
