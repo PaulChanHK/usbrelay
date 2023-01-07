@@ -1,9 +1,15 @@
 #!/bin/bash -xe
 
-sed -ri 's/^from distutils.core/from setuptools/' setup.py
+# Usage:
+# VER=1.1 ./create_whl.sh
+# ./create_whl.sh clean
 
-python3 setup.py bdist_wheel
+cd usbrelay_py
 
-sed -ri 's/^from setuptools/from distutils.core/' setup.py
-mv dist/*.whl .
-rm -fr dist
+version="${VER:-1.0}"
+
+sed -ri \
+ -e "s/(version =).*,/\1 '$version',/" \
+  setup.py
+
+make $@

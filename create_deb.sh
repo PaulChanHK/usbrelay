@@ -1,14 +1,22 @@
 #!/bin/bash -xe
 
-version=$(cat setup.py | sed -rn "s/.*version = '(.*?)'.*/\1/p")
-author=$(cat setup.py | sed -rn 's/.*author = "(.*?)".*/\1/p')
-description=$(cat setup.py | sed -rn "s/.*description = '(.*?)'.*/\1/p" | sed 's/ from Python//')
+# Usage:
+# VER=1.1 ./create_deb.sh
+# ./create_deb.sh clean
 
-mkdir -p deb/usr/{bin,lib} deb/DEBIAN
-cp usbrelay deb/usr/bin/
-cp libusbrelay.so deb/usr/lib/
+setup_py=usbrelay_py/setup.py
 
-cat >deb/DEBIAN/control<<EOM
+version="${VER:-1.0}"
+author=$(cat $setup_py | sed -rn 's/.*author = "(.*?)".*/\1/p')
+description=$(cat $setup_py | sed -rn "s/.*description = '(.*?)'.*/\1/p" | sed 's/ from Python//')
+
+sed -ri "s/(USBLIBVER =).*/\1 $version/" LIBVER.in
+
+if [[ ! "$@" =~ clean ]]; then
+
+  mkdir -p deb/usr/{bin,lib} deb/DEBIAN
+
+  cat >deb/DEBIAN/control<<EOM
 Package: usbrelay
 Version: $version
 Section: custom
@@ -20,5 +28,18 @@ Maintainer: $author
 Description: $description
 EOM
 
-dpkg-deb --build deb
-dpkg-name -o deb.deb
+  make $@
+
+  cp usbrelay deb/usr/bin/
+  cp libusbrelay.so* deb/usr/lib/
+
+  dpkg-deb --build deb
+  dpkg-name -o deb.deb
+
+else
+
+  make $@
+  rm -fr deb *.deb
+
+fi
+
