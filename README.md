@@ -1,5 +1,5 @@
 # USB Relay Driver For Linux
-Latest Stable Release 0.7 ([Zip](https://github.com/darrylb123/usbrelay/archive/0.7.zip), [tar.gz](https://github.com/darrylb123/usbrelay/archive/0.7.tar.gz))
+Latest Stable Release 0.9 ([Zip](https://github.com/darrylb123/usbrelay/archive/refs/tags/0.9.zip), [tar.gz](https://github.com/darrylb123/usbrelay/archive/refs/tags/0.9.tar.gz))
 
 ![alt text](usbrelay.jpg "USB Relay")
 
@@ -92,6 +92,13 @@ This code is a maintained package in Debian (and Raspian). Use normal apt-get co
 $ sudo apt-get install usbrelay
 ```
 
+### Installing Fedora Packages:
+The packages are available in Fedora36+
+
+```
+$ sudo dnf install usbrelay-common python3-usbrelay usbrelay-mqtt
+```
+
 Other Linux platforms will need to build the source, see below
 
 ### Protocol:
@@ -132,12 +139,17 @@ $ ./build.sh
 The usbrelay binary, libusbrelay.so and libusbrelay_py.so libraries will be built in the root directory of the repo.
 
 ### Usage:
-The code needs to access the device. This can be achieved either by running the program with root privileges (so sudo is your friend) or by putting
+The code needs to access the device. This can be achieved either by running the program with root privileges (so sudo is your friend) or by copying 
+50-usbrelay.rules to /etc/udev/rules.d
 ```
-SUBSYSTEM=="usb", ATTR{idVendor}=="16c0",ATTR{idProduct}=="05df", MODE="0666"
-KERNEL=="hidraw*", ATTRS{busnum}=="1", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05df", MODE="0666"
+$ sudo cp 50-usbrelay.rules /etc/udev/rules.d
+$ sudo udevadm control -R
 ```
-to `/etc/udev/rules.d/50-dct-tech-usb-relay-2.rules`.
+
+Add users that need to operate the relays to the usbrelay group:
+```
+sudo usermod -a -G usbrelay <user name>
+```
 
 ```
 $ sudo usbrelay --help
@@ -247,26 +259,29 @@ This also optionally includes a python extension. In order to build the python e
 Debian:
 ```
 ##Install Python3 dev package
-# sudo apt install libpython3.5-dev
+# sudo apt install libpython3-dev python3-venv pip
+# sudo pip install build
 ```
 
 Fedora:
 ```
-##Install Python3 dev pacakage
-# dnf install python3-devel
+##Install Python3 dev package
+# sudo dnf install python3-devel
+# sudo dnf install python3-build
 ```
 
 With the dependency installed, the library can be built and installed with:
 ```
 ##Build libusbrelay_py.so
-$ make python
+$ cd usbrelay_py
+$ make
 ##Install to global python
-$ sudo make install_py
+$ sudo make install
 ```
 
 Once installed, the library can be used by any python script, assuming it is running as a user with suitable permissions per the changes to udev above.
 
-The following is a test script included as test.py, showing how to use the library:
+The following is a test script included as tests/usbrelay_test.py, showing how to use the library:
 ```
 import usbrelay_py
 import time
@@ -298,6 +313,24 @@ $ python3 test.py
 ```
 It will turn on and then off every relay attached to every board on your system.
 
+### Fine-grained UDEV permissions
+
+When using many relays on a system, which is shared by several users
+and it is not desired to give all users access to all relays, one can
+add the following line to udev rules, e.g.
+`/etc/udev/rules.d/50-dct-tech-usb-relay-2.rules`.
+
+    SUBSYSTEMS=="usb", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05df", IMPORT{program}="/usr/bin/usbrelay --quiet --export-id $devnode"
+
+This ensures that subsequent rules can use relay ID stored in the
+ID_SERIAL environment variable to match different relays. For example
+giving permissions for different relays to different users can be
+achieved by the following rules:
+
+    SUBSYSTEMS=="usb", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05df", ENV{ID_SERIAL}=="PSUIS", MODE="0600", OWNER="user1"
+    SUBSYSTEMS=="usb", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05df", ENV{ID_SERIAL}=="0U70M", MODE="0600", OWNER="user2"
+
+
 ## Support for Ucreatefun USB Modules
 ![alt text](ucreatefun.jpg "USB Relay")
 
@@ -310,7 +343,7 @@ A USB relay became available that is supported by the software but with severe l
 The module has a USB device ID of 0519:2018.
 There are modules with 1,2,4,and 8 relays. The module accepts a request for relay 9 which turns on/off all relays.
 Operating the module works the same as for the DccTech modules except the serial used is A0001
-Running usbrelay without arguments prints all posible relays (8) to stdout.
+Running usbrelay without arguments prints all possible relays (8) to stdout.
 ```
 $ sudo usbrelay A0001_2=1 # Turns on relay 2
 $ sudo usbrelay /dev/hidraw4_1=1
@@ -319,8 +352,10 @@ $ sudo usbrelay A0001_9=1 # turns on all relays
 ## Referencing devices by physical USB port
 Symbolic links can be used to devices to allow physical USB ports to be referenced. The following line in a /etc/udev/rules.d file will create a symbolic link with the name of the USB port:
 ```
-KERNEL=="hidraw*",KERNELS=="*-*", SYMLINK+="hidrawport%b"
+KERNEL=="hidraw*",KERNELS=="*-*", SYMLINK+="usbrelay%b"
 ```
+The default 50-usbrelay.rules udev file creates these links for UCREATEFUN relays.
+
 The following example has a ucreatefun usb relay plugged into a USB port and 2 dcttech relays plugged into a USB hub attached to another port:
 ```
 $ ls -l /dev/hidr*
@@ -331,13 +366,13 @@ crw-------. 1 root root 243, 3 Mar  9 15:23 /dev/hidraw3
 crw-------. 1 root root 243, 4 Mar  9 17:47 /dev/hidraw4
 crw-------. 1 root root 243, 5 Mar  9 17:36 /dev/hidraw5
 crw-------. 1 root root 243, 6 Mar  9 17:47 /dev/hidraw6
-lrwxrwxrwx. 1 root root      7 Mar  9 17:47 /dev/hidrawport3-10.1:1.0 -> hidraw4 
-lrwxrwxrwx. 1 root root      7 Mar  9 17:47 /dev/hidrawport3-10.3:1.0 -> hidraw6
-lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/hidrawport3-5:1.0 -> hidraw0
-lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/hidrawport3-5:1.1 -> hidraw1
-lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/hidrawport3-5:1.2 -> hidraw2
-lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/hidrawport3-6:1.0 -> hidraw3
-lrwxrwxrwx. 1 root root      7 Mar  9 17:36 /dev/hidrawport3-9:1.0 -> hidraw5
+lrwxrwxrwx. 1 root root      7 Mar  9 17:47 /dev/usbrelay3-10.1:1.0 -> hidraw4 
+lrwxrwxrwx. 1 root root      7 Mar  9 17:47 /dev/usbrelay3-10.3:1.0 -> hidraw6
+lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/usbrelay3-5:1.0 -> hidraw0
+lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/usbrelay3-5:1.1 -> hidraw1
+lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/usbrelay3-5:1.2 -> hidraw2
+lrwxrwxrwx. 1 root root      7 Mar  9 15:23 /dev/usbrelay3-6:1.0 -> hidraw3
+lrwxrwxrwx. 1 root root      7 Mar  9 17:36 /dev/usbrelay3-9:1.0 -> hidraw5
 
 $ sudo usbrelay
 OMG12_1=0
@@ -356,10 +391,10 @@ A0001_9=-1
 
   
   
-  $ sudo usbrelay -d /dev/hidrawport3-10.1:1.0_1=1 /dev/hidrawport3-10.3:1.0_2=0 /dev/hidrawport3-9:1.0_2=0
-Orig: /dev/hidrawport3-10.1:1.0_1=1, Serial: /dev/hidrawport3-10.1:1.0, Relay: 1 State: ff
-Orig: /dev/hidrawport3-10.3:1.0_2=0, Serial: /dev/hidrawport3-10.3:1.0, Relay: 2 State: fd
-Orig: /dev/hidrawport3-9:1.0_2=0, Serial: /dev/hidrawport3-9:1.0, Relay: 2 State: fd
+  $ sudo usbrelay -d /dev/usbrelay3-10.1:1.0_1=1 /dev/usbrelay3-10.3:1.0_2=0 /dev/usbrelay3-9:1.0_2=0
+Orig: /dev/usbrelay3-10.1:1.0_1=1, Serial: /dev/usbrelay3-10.1:1.0, Relay: 1 State: ff
+Orig: /dev/husbrelay3-10.3:1.0_2=0, Serial: /dev/usbrelay3-10.3:1.0, Relay: 2 State: fd
+Orig: /dev/usbrelay3-9:1.0_2=0, Serial: /dev/usbrelay3-9:1.0, Relay: 2 State: fd
 Found 3 devices
 Device Found
   type: 16c0 05df
@@ -391,20 +426,20 @@ Device Found
   Interface:    0
   Number of Relays = 9
   Module_type = 2
-Serial: /dev/hidrawport3-10.1:1.0, Relay: 1 State: ff 
-1 HID Serial: ASDFG Serial: /dev/hidrawport3-10.1:1.0, Relay: 1 State: ff
+Serial: /dev/usbrelay3-10.1:1.0, Relay: 1 State: ff 
+1 HID Serial: ASDFG Serial: /dev/usbrelay3-10.1:1.0, Relay: 1 State: ff
 
-Serial: /dev/hidrawport3-10.3:1.0, Relay: 2 State: fd 
-2 HID Serial: 48VZ7 Serial: /dev/hidrawport3-10.3:1.0, Relay: 2 State: fd
+Serial: /dev/usbrelay3-10.3:1.0, Relay: 2 State: fd 
+2 HID Serial: 48VZ7 Serial: /dev/usbrelay3-10.3:1.0, Relay: 2 State: fd
 
-Serial: /dev/hidrawport3-9:1.0, Relay: 2 State: fd 
-3 HID Serial: A0001 Serial: /dev/hidrawport3-9:1.0, Relay: 2 State: fd
+Serial: /dev/usbrelay3-9:1.0, Relay: 2 State: fd 
+3 HID Serial: A0001 Serial: /dev/usbrelay3-9:1.0, Relay: 2 State: fd
 target fd ucreate 2 f0 f0
 
 
-Serial: /dev/hidrawport3-10.1:1.0, Relay: 1 State: ff --- Found
-Serial: /dev/hidrawport3-10.3:1.0, Relay: 2 State: fd --- Found
-Serial: /dev/hidrawport3-9:1.0, Relay: 2 State: fd --- Found
+Serial: /dev/usbrelay3-10.1:1.0, Relay: 1 State: ff --- Found
+Serial: /dev/usbrelay3-10.3:1.0, Relay: 2 State: fd --- Found
+Serial: /dev/husbrelay3-9:1.0, Relay: 2 State: fd --- Found
 
 
 ```
@@ -419,30 +454,61 @@ MQTT support provides capability of using Home Assistant or nodered with usbrela
 
 - usbrelayd 
 - usbrelay.service
-- usbrelay.conf 
-- 50-usbrelay.rules 
+- usbrelayd.conf
 #### usbrelayd
 A python daemon using libusbrelay to connect to an MQTT server. When the daemon starts, it publishes the state of all usbrelay devices found and subscribes to command topics for each relay.
 To install:
+
+Debian
+```
+sudo apt-get install python3-paho-mqtt
+sudo cp usbrelayd /usr/sbin
+sudo cp usbrelayd.conf /etc/usbrelayd.conf
+
+```
+Fedora
 ```
 sudo useradd usbrelay
-sudo apt-get install python-paho-mqtt (Debian)
-dnf install python3-paho-mqtt (Fedora)
-cp usbrelayd /usr/local/sbin
+sudo dnf install python3-paho-mqtt
+sudo cp usbrelayd /usr/sbin
+sudo cp usbrelayd.conf /etc/usbrelayd.conf
 ```
-#### usbrelay.service usbrelay.conf
-A systemd unit and environment file for controlling and monitoring the usbrelayd daemon
+
+Modify /etc/usbrelayd.conf to suit your circumstances.
+#### usbrelay.service 
+A systemd unit for controlling and monitoring the usbrelayd daemon. The file comes configured for Fedora and needs to be modified for Debian. 
+
+
+Debian
+
+Edit usbrelayd.service and change
+```
+SupplementaryGroups=usbrelay
+```
+to
+```
+SupplementaryGroups=plugdev
+```
 To install:
+
 ```
 sudo cp usbrelayd.service /etc/systemd/system
-sudo cp usbrelayd.conf /usr/local/etc/usbrelayd.conf
 sudo systemctl daemon-reload
 ```
-Edit usbrelay.conf to set the address of your mqtt broker
 
 #### 50-usbrelay.rules
-A udev rule file that reacts and starts/stops the usbrelayd.service when a module is pluggedin or removed
+A udev rule file that reacts and starts/stops the usbrelayd.service when a module is pluggedin or removed. The file should be installed with the initial installation. The file comes configured for Fedora and needs to be modified for Debian. 
 
+Debian
+
+Edit 50-usbrelay.rules and change
+```
+GROUP="usbrelay"
+```
+to 
+```
+GROUP="plugdev"
+```
 To install:
 ```
 sudo cp 50-usbrelay.rules /etc/udev/rules.d
@@ -461,7 +527,7 @@ usbrelayd.service - USB Relay MQTT service
      Memory: 14.4M
         CPU: 117ms
      CGroup: /system.slice/usbrelayd.service
-             └─1151364 /usr/bin/python3 /usr/local/sbin/usbrelayd nodered
+             └─1151364 /usr/bin/python3 /usr/local/sbin/usbrelayd mymqttbroker
 
 Jun 24 15:23:01 xxx.local systemd[1]: Started USB Relay MQTT service.
 Jun 24 15:23:02 xxx.local python3[1151364]: Modules Connected:  1

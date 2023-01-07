@@ -33,6 +33,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 relay_board *relay_boards = 0;
 int relay_board_count = 0;
 int i, k;
+const char *libversion = GITVERSION;
 
 //Private function prototypes
 static int get_board_features(relay_board * board, hid_device * handle);
@@ -41,6 +42,9 @@ int known_relay(struct hid_device_info *thisdev);
 /**
  * Enumerate all possible relay devices in the system
  */
+const char * libusbrelay_version(void){
+	return libversion;
+}
 int enumerate_relay_boards(const char *product, int verbose, int debug)
 {
 
@@ -52,7 +56,7 @@ int enumerate_relay_boards(const char *product, int verbose, int debug)
 
 	//Count the number of returned devices
 	cur_dev = devs;
-	if (debug) fprintf(stderr,"Library Version: %s\n",GITVERSION);
+	// if (debug) fprintf(stderr,"Library Version: %s\n",libversion);
 
 	while (cur_dev != NULL) {
 		// Check if the HID device is a known relay else jump over it
@@ -80,8 +84,6 @@ int enumerate_relay_boards(const char *product, int verbose, int debug)
 				memcpy(relay_boards[relay].path, cur_dev->path,
 				       strlen(cur_dev->path) + 1);
 
-				// The product string is USBRelayx where x is number of relays read to the \0 in case there are more than 9
-				relay_boards[relay].relay_count = atoi((const char *)&cur_dev->product_string[8]);
 				
 				// Ucreatefun relays do not have any information returned from the HID report
 				// The USB serial is also fixed so this is copied to the module serial so that something can make the module unique
@@ -92,6 +94,9 @@ int enumerate_relay_boards(const char *product, int verbose, int debug)
 					wcstombs(relay_boards[relay].serial,
 						 cur_dev->serial_number,
 						 Serial_Length);
+				} else {
+					// The product string is USBRelayx where x is number of relays read to the \0 in case there are more than 9
+					relay_boards[relay].relay_count = atoi((const char *)&cur_dev->product_string[8]);
 				}
 				//Open it to get more details
 				hid_device *handle;
@@ -142,7 +147,9 @@ int enumerate_relay_boards(const char *product, int verbose, int debug)
 				}
 				relay++;
 			}
-			cur_dev = cur_dev->next;
+			do {
+				cur_dev = cur_dev->next;
+			} while (cur_dev != NULL && !known_relay(cur_dev));
 		}
 	}
 	hid_free_enumeration(devs);

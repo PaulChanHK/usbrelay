@@ -34,7 +34,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 static void argp_print_version(FILE *stream, struct argp_state *state)
 {
-	fprintf(stream, "usbrelay %s\n", GITVERSION);
+	fprintf(stream, "libusbrelay: %s\nusbrelay: %s\n", libusbrelay_version(), GITVERSION);
 }
 
 void (*argp_program_version_hook)(FILE *stream, struct argp_state *state) = argp_print_version;
@@ -50,7 +50,7 @@ static char doc[] =
 	"\vWithout ACTION, the actual state of all relays is printed to stdout.\n"
 	"ACTION can be one of:\n"
 	"RELID_N=[0|1] to switch the N-th relay off or on\n"
-	"RELID=NEWID to change relay ID\n"
+	"RELID_0=NEWID to change relay ID\n"
 	;
 
 /* A description of the arguments we accept. */
@@ -60,6 +60,7 @@ static char args_doc[] = "[ACTION...]";
 static struct argp_option options[] = {
 	{"debug",    'd', 0,       0, "Produce debugging output" },
 	{"quiet",    'q', 0,       0, "Be quiet" },
+	{"export-id",'e', "DEV",   0, "Print relay ID of the given DEV (/dev/hidrawXX) in udev-compatible format" },
 	{ 0 }
 };
 
@@ -68,6 +69,7 @@ struct arguments
 {
 	int debug;
 	int verbose;
+	char *export_id;	/* "/dev/hidrawXX" or NULL */
 };
 
 /* Parse a single option. */
@@ -81,6 +83,9 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	switch (key) {
 	case 'd':
 		args->debug = 1;
+		break;
+	case 'e':
+		args->export_id = arg;
 		break;
 	case 'q':
 		args->verbose = 0;
@@ -107,6 +112,7 @@ int main(int argc, char *argv[])
 	int exit_code = 0;
 	struct arguments args = {
 		.debug = 0,
+		.export_id = NULL,
 		.verbose = 1,
 	};
 
@@ -144,6 +150,7 @@ int main(int argc, char *argv[])
 
 		relay->this_serial = malloc(size + 1);
 		strncpy(relay->this_serial, arg, size);
+		relay->this_serial[size] = 0;
 
 		/* Parse relay number */
 		if (underscore)
@@ -153,6 +160,7 @@ int main(int argc, char *argv[])
 			if (relay->relay_num == 0) {	/* command to change the serial - remaining token is the new serial */
 				strncpy(relay->new_serial, equal_sign + 1,
 					sizeof(relay->new_serial) - 1);
+				relay->new_serial[sizeof(relay->new_serial) -1] = 0;
 			} else {
 				if (atoi(equal_sign + 1)) {
 					relays[i].state = CMD_ON;
@@ -169,10 +177,25 @@ int main(int argc, char *argv[])
 			relay->found = 0;
 		}
 	}
-
+	// Warn if library is different version
+	if( strcmp(libusbrelay_version(),GITVERSION)) {
+		fprintf(stderr, "Warning: Version difference\nlibusbrelay: %s\nusbrelay: %s\n", libusbrelay_version(), GITVERSION);
+	}
+	
 	//Locate and identify attached relay boards
-	if(args.debug) fprintf(stderr,"Version: %s\n",GITVERSION);
+	if(args.debug) 
+		fprintf(stderr, "libusbrelay: %s\nusbrelay: %s\n", libusbrelay_version(), GITVERSION);
 	enumerate_relay_boards(getenv("USBID"), args.verbose, args.debug);
+
+	if (args.export_id) {
+		relay_board *relay = find_board(args.export_id, args.debug);
+		if (!relay) {
+			fprintf(stderr, "relay '%s' not found\n", args.export_id);
+			exit(1);
+		}
+		printf("ID_SERIAL=%s\n", relay->serial);
+		return 0;
+	}
 
 	/* loop through the supplied command line and try to match the serial */
 	for (i = 0; i < (argc - optind); i++) {
@@ -226,7 +249,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	if (relays) {
-		for (i = 1; i < (argc - optind) ; i++) {
+		for (i = 0; i < (argc - optind) ; i++) {
 			free(relays[i].this_serial);
 		}
 		free(relays);
