@@ -13,3 +13,7 @@ sed -ri \
   setup.py
 
 make $@
+
+if [[ ! "$@" =~ clean ]]; then
+    mv dist/usbrelay_py*.whl ../ 2>/dev/null || true
+fi
