@@ -21,7 +21,7 @@ Package: usbrelay
 Version: $version
 Section: custom
 Priority: optional
-Architecture: all
+Architecture: $(uname -m)
 Essential: no
 Installed-Size: $(du -s deb/usr/ | awk '{print $1}')
 Maintainer: $author
