@@ -18,7 +18,7 @@ from setuptools import setuptools, setup
 
 setup(
     name = 'usbrelay_py',
-    version = '1.1',
+    version = '1.1.2',
     description = 'USB Relay board control from Python',
     url = 'https://github.com/darrylb123/usbrelay',
     author = "Sean Mollet",
